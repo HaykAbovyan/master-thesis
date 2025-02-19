@@ -291,16 +291,16 @@ export default function TypingTestPage() {
         <div>
           <div className="flex items-center space-x-2">
             <Keyboard className="w-5 h-5" />
-            <h1 className="text-2xl font-bold">Typing Test</h1>
+            <h1 className="text-2xl font-bold">Մուտքագրման թեստ</h1>
           </div>
-          <p className="text-gray-600">Test your typing speed and accuracy.</p>
+          <p className="text-gray-600">Ստուգեք ձեր մուտքագրման արագությունը և ճշգրտությունը:</p>
         </div>
 
         {/* Reference Text */}
         <div>
           <div className="flex items-center space-x-2">
             <FileText className="w-5 h-5" />
-            <h2 className="text-xl font-semibold">Reference Text</h2>
+            <h2 className="text-xl font-semibold">Տեքստ</h2>
           </div>
           <div className="mt-2 p-4 bg-gray-50 border border-gray-200 rounded">
             <p className="text-gray-800">{REFERENCE_TEXT}</p>
@@ -311,14 +311,14 @@ export default function TypingTestPage() {
         <div>
           <div className="flex items-center space-x-2">
             <Keyboard className="w-5 h-5" />
-            <h2 className="text-xl font-semibold">Your Input</h2>
+            <h2 className="text-xl font-semibold">Մուտքագրման դաշտ</h2>
           </div>
           <p className="text-gray-600 text-sm mt-1">
-            The timer starts on your first keystroke and ends when you press Enter.
+          Ժամանակաչափը սկսվում է ստեղնաշարի առաջին հպումից և ավարտվում, երբ սեղմում եք Enter:
           </p>
           <textarea
             ref={inputRef}
-            placeholder="Start typing here..."
+            placeholder="Մուտքագրեք տեքստը այստեղ..."
             className="w-full p-2 border rounded h-40 resize-none mt-2"
             value={inputValue}
             onChange={handleChange}

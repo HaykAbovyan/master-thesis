@@ -8,7 +8,7 @@ import { AlertCircle, Clock, FileText, Check, Keyboard } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 // Reference text for typing
-const referenceText = "The quick brown fox jumps over the lazy dog. Packed with vitamins and minerals, the nutritional value of this ancient grain has been recognized for centuries. As technology continues to advance, we must consider its impact on society and personal privacy. Climate change remains one of the most pressing challenges of our time, requiring global cooperation and innovative solutions.";
+const referenceText = "Աշակերտները դասարանում են: Նրանք սովորում են հայոց լեզու: Ուսուցչուհին գրատախտակին գրում է նոր բառեր:Աշակերտները ուշադիր լսում են ուսուսցչուհուն: Պատուհանից երևում է դպրոցի բակը: Այնտեղ մեծ ծառեր կան: Զանգը հնչում է, և դասը ավարտվում է: Երեխաները հավաքում են իրենց գրքերը: Նրանք դուրս են գալիս դասարանից: Բակում սկսում են խաղալ: Արևը պայծառ շողում է: Եղանակը տաք է և հաճելի: Շուտով կսկսվի հաջորդ դասը:";
 
 // Define mistake types interface
 interface MistakeAnalysis {
