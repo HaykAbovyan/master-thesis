@@ -309,9 +309,6 @@ export default function TypingTestPage() {
             <h2 className="text-xl font-semibold">Մուտքագրման դաշտ</h2>
           </div>
           <p className="text-gray-600 text-sm mt-1">
-            The timer starts on your first keystroke and ends when you press
-          </p>
-          <p className="text-gray-600 text-sm mt-1">
             Ժամանակաչափը սկսվում է ստեղնաշարի առաջին հպումից և ավարտվում, երբ
             սեղմում եք Enter:
           </p>
