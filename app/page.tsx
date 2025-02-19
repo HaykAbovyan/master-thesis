@@ -286,7 +286,9 @@ export default function TypingTestPage() {
             <Keyboard className="w-5 h-5" />
             <h1 className="text-2xl font-bold">Մուտքագրման թեստ</h1>
           </div>
-          <p className="text-gray-600">Ստուգեք ձեր մուտքագրման արագությունը և ճշգրտությունը:</p>
+          <p className="text-gray-600">
+            Ստուգեք ձեր մուտքագրման արագությունը և ճշգրտությունը:
+          </p>
         </div>
 
         {/* Reference Text */}
@@ -308,8 +310,10 @@ export default function TypingTestPage() {
           </div>
           <p className="text-gray-600 text-sm mt-1">
             The timer starts on your first keystroke and ends when you press
+          </p>
           <p className="text-gray-600 text-sm mt-1">
-          Ժամանակաչափը սկսվում է ստեղնաշարի առաջին հպումից և ավարտվում, երբ սեղմում եք Enter:
+            Ժամանակաչափը սկսվում է ստեղնաշարի առաջին հպումից և ավարտվում, երբ
+            սեղմում եք Enter:
           </p>
           <textarea
             ref={inputRef}
