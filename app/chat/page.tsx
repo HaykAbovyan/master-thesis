@@ -1,15 +1,22 @@
 // app/page.tsx
 'use client';
 
-import { useState, useRef, KeyboardEvent } from 'react';
-import { Button } from '@/components/ui/button'; // example shadcn‑ui import
-import { Input } from '@/components/ui/input'; // example shadcn‑ui import
+import { useState, useRef, KeyboardEvent, ChangeEvent } from 'react';
+import { Button } from '@/components/ui/button'; // shadcn‑ui component
+import { Keyboard, FileText } from 'lucide-react'; // Lucide icons
 
-// A fixed reference text that every user will type.
+// Fixed reference text for the typing test.
 const REFERENCE_TEXT =
-  "The quick brown fox jumps over the lazy dog. This sentence is used as a typing test to evaluate speed and accuracy.";
+  "Աշակերտները դասարանում են: Նրանք սովորում են հայոց լեզու: Ուսուցչուհին գրատախտակին գրում է նոր բառեր: Աշակերտները ուշադիր լսում են ուսուսցչուհուն: Պատուհանից երևում է դպրոցի բակը: Այնտեղ մեծ ծառեր կան: Զանգը հնչում է, և դասը ավարտվում է: Երեխաները հավաքում են իրենց գրքերը: Նրանք դուրս են գալիս դասարանից: Բակում սկսում են խաղալ: Արևը պայծառ շողում է: Եղանակը տաք է և հաճելի: Շուտով կսկսվի հաջորդ դասը:";
 
-// Types for diff operations
+// Pre-calculate reference text word boundaries.
+const refWords = REFERENCE_TEXT.trim().split(/\s+/);
+const totalRefWords = refWords.length;
+const section1WordCount = Math.floor(totalRefWords / 3);
+const section2WordCount = Math.floor(totalRefWords / 3);
+const section2Threshold = section1WordCount + section2WordCount; // when section 2 is done
+
+// Diff types
 type DiffOp =
   | { op: 'equal'; refChar: string; inputChar: string }
   | { op: 'substitute'; refChar: string; inputChar: string }
@@ -17,21 +24,18 @@ type DiffOp =
   | { op: 'delete'; refChar: string };
 
 /**
- * Computes a simple diff between the reference and input strings using dynamic programming.
- * Returns an array of operations that transform the reference text into the user input.
+ * Compute a simple diff between two strings using dynamic programming.
  */
 function computeDiff(ref: string, input: string): DiffOp[] {
   const m = ref.length;
   const n = input.length;
-  const dp: number[][] = Array.from({ length: m + 1 }, (_, i) =>
+  const dp: number[][] = Array.from({ length: m + 1 }, () =>
     Array(n + 1).fill(0)
   );
 
-  // Initialize DP table.
   for (let i = 0; i <= m; i++) dp[i][0] = i;
   for (let j = 0; j <= n; j++) dp[0][j] = j;
 
-  // Fill DP table.
   for (let i = 1; i <= m; i++) {
     for (let j = 1; j <= n; j++) {
       if (ref[i - 1] === input[j - 1]) {
@@ -46,7 +50,6 @@ function computeDiff(ref: string, input: string): DiffOp[] {
     }
   }
 
-  // Backtrack to produce the diff.
   let i = m,
     j = n;
   const diff: DiffOp[] = [];
@@ -55,11 +58,7 @@ function computeDiff(ref: string, input: string): DiffOp[] {
       diff.push({ op: 'equal', refChar: ref[i - 1], inputChar: input[j - 1] });
       i--;
       j--;
-    } else if (
-      i > 0 &&
-      j > 0 &&
-      dp[i][j] === dp[i - 1][j - 1] + 1
-    ) {
+    } else if (i > 0 && j > 0 && dp[i][j] === dp[i - 1][j - 1] + 1) {
       diff.push({
         op: 'substitute',
         refChar: ref[i - 1],
@@ -79,10 +78,10 @@ function computeDiff(ref: string, input: string): DiffOp[] {
 }
 
 /**
- * Analyze the diff operations and count:
- * - Incorrect Spaces: missing spaces or extra/multiple spaces.
- * - Missing Letters: deletions of letters (non‑spaces).
- * - Typos: substitutions or insertions of non‑space characters.
+ * Analyze diff operations to count:
+ * - Incorrect Spaces: missing spaces or extra spaces.
+ * - Missing Letters: deletions of non-space characters.
+ * - Typos: substitutions or insertions of non-space characters.
  */
 function analyzeDiff(diff: DiffOp[]) {
   let incorrectSpaces = 0,
@@ -112,144 +111,217 @@ function analyzeDiff(diff: DiffOp[]) {
   return { incorrectSpaces, missingLetters, typos };
 }
 
-/**
- * Splits two texts (the reference and the user input) into three sections based on word count.
- * If the texts are too short (less than 9 words), returns a single section.
- */
-function splitTextsIntoSections(
-  ref: string,
-  input: string
-): { refSections: string[]; inputSections: string[] } {
-  const refWords = ref.trim().split(/\s+/);
-  const inputWords = input.trim().split(/\s+/);
-  // Use the smaller word count to define the sections.
-  const n = Math.min(refWords.length, inputWords.length);
-  if (n < 9) {
-    return { refSections: [ref], inputSections: [input] };
-  }
-  const sectionSize = Math.floor(n / 3);
-  const refSections = [
-    refWords.slice(0, sectionSize).join(' '),
-    refWords.slice(sectionSize, 2 * sectionSize).join(' '),
-    refWords.slice(2 * sectionSize, n).join(' '),
-  ];
-  const inputSections = [
-    inputWords.slice(0, sectionSize).join(' '),
-    inputWords.slice(sectionSize, 2 * sectionSize).join(' '),
-    inputWords.slice(2 * sectionSize, n).join(' '),
-  ];
-  return { refSections, inputSections };
-}
+type SectionResult = {
+  section: string;
+  incorrectSpaces: number;
+  missingLetters: number;
+  typos: number;
+  wpm: number;
+};
 
 export default function TypingTestPage() {
   const [inputValue, setInputValue] = useState('');
   const [started, setStarted] = useState(false);
   const [finished, setFinished] = useState(false);
   const [startTime, setStartTime] = useState<number | null>(null);
-  const [endTime, setEndTime] = useState<number | null>(null);
+  const [finishTime, setFinishTime] = useState<number | null>(null);
   const [overallResult, setOverallResult] = useState<{
     wpm: number;
     incorrectSpaces: number;
     missingLetters: number;
     typos: number;
   } | null>(null);
-  const [sectionResults, setSectionResults] = useState<
-    {
-      section: string;
-      incorrectSpaces: number;
-      missingLetters: number;
-      typos: number;
-    }[]
-  >([]);
+  const [sectionResults, setSectionResults] = useState<SectionResult[]>([]);
 
-  const inputRef = useRef<HTMLInputElement>(null);
+  // Section timestamps
+  const [section1Time, setSection1Time] = useState<number | null>(null);
+  const [section2Time, setSection2Time] = useState<number | null>(null);
 
-  // Called on every key press in the input field.
-  const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+  // Use HTMLTextAreaElement as the ref type for the multi-line input.
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  // Called on each key press in the textarea.
+  const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (!started) {
       setStarted(true);
       setStartTime(Date.now());
     }
-
-    // If user presses "Enter", finish the test.
+    // End the test when Enter is pressed.
     if (e.key === 'Enter') {
       e.preventDefault();
       if (!finished) finishTest();
     }
   };
 
-  // Finalize the test: record end time, perform overall and (if applicable) section analysis.
-  const finishTest = () => {
-    const end = Date.now();
-    setEndTime(end);
-    setFinished(true);
+  // Called on every change in the textarea.
+  const handleChange = (e: ChangeEvent<HTMLTextAreaElement>) => {
+    const value = e.target.value;
+    setInputValue(value);
 
-    const durationMinutes =
-      startTime !== null ? (end - startTime) / 60000 : 0.001; // avoid division by zero
+    // Check current word count.
+    const trimmed = value.trim();
+    const words = trimmed === '' ? [] : trimmed.split(/\s+/);
+    const currentWordCount = words.length;
 
-    // Calculate overall WPM based on words typed.
-    const wordsTyped = inputValue.trim() === '' ? 0 : inputValue.trim().split(/\s+/).length;
-    const wpm = wordsTyped / durationMinutes;
-
-    // Overall error analysis: compare the fixed reference text against the user input.
-    const overallDiff = computeDiff(REFERENCE_TEXT, inputValue);
-    const { incorrectSpaces, missingLetters, typos } = analyzeDiff(overallDiff);
-    setOverallResult({ wpm, incorrectSpaces, missingLetters, typos });
-
-    // If the text is long enough, split into three sections.
-    const { refSections, inputSections } = splitTextsIntoSections(
-      REFERENCE_TEXT,
-      inputValue
-    );
-    if (refSections.length === 3 && inputSections.length === 3) {
-      const sections = refSections.map((refSec, idx) => {
-        const inpSec = inputSections[idx];
-        const diff = computeDiff(refSec, inpSec);
-        const analysis = analyzeDiff(diff);
-        // Label sections as Beginning, Middle, End.
-        const label =
-          idx === 0 ? 'Beginning' : idx === 1 ? 'Middle' : 'End';
-        return { section: label, ...analysis };
-      });
-      setSectionResults(sections);
+    // Capture section times if thresholds are met.
+    if (!section1Time && currentWordCount >= section1WordCount) {
+      setSection1Time(Date.now());
+    }
+    if (!section2Time && currentWordCount >= section2Threshold) {
+      setSection2Time(Date.now());
     }
   };
 
-  // Reset the test for a new try.
+  // Finalize the test.
+  const finishTest = () => {
+    const end = Date.now();
+    setFinishTime(end);
+    setFinished(true);
+
+    const durationMinutes =
+      startTime !== null ? (end - startTime) / 60000 : 0.001;
+
+    // Overall WPM calculation based on words typed.
+    const overallWords =
+      inputValue.trim() === ''
+        ? 0
+        : inputValue.trim().split(/\s+/).length;
+    const overallWPM = overallWords / durationMinutes;
+
+    // Overall error analysis comparing the fixed reference to the input.
+    const overallDiff = computeDiff(REFERENCE_TEXT, inputValue);
+    const overallAnalysis = analyzeDiff(overallDiff);
+    setOverallResult({
+      wpm: overallWPM,
+      incorrectSpaces: overallAnalysis.incorrectSpaces,
+      missingLetters: overallAnalysis.missingLetters,
+      typos: overallAnalysis.typos,
+    });
+
+    // Proceed with section analysis only if input is long enough and timestamps are set.
+    const inputWords = inputValue.trim().split(/\s+/);
+    if (
+      inputWords.length >= totalRefWords &&
+      section1Time !== null &&
+      section2Time !== null
+    ) {
+      // Divide reference text into sections.
+      const refSection1 = refWords.slice(0, section1WordCount).join(' ');
+      const refSection2 = refWords
+        .slice(section1WordCount, section2Threshold)
+        .join(' ');
+      const refSection3 = refWords.slice(section2Threshold).join(' ');
+
+      // Divide input text into corresponding sections.
+      const inputSection1 = inputWords.slice(0, section1WordCount).join(' ');
+      const inputSection2 = inputWords
+        .slice(section1WordCount, section2Threshold)
+        .join(' ');
+      const inputSection3 = inputWords
+        .slice(section2Threshold, totalRefWords)
+        .join(' ');
+
+      // Compute diff and error analysis for each section.
+      const analysis1 = analyzeDiff(computeDiff(refSection1, inputSection1));
+      const analysis2 = analyzeDiff(computeDiff(refSection2, inputSection2));
+      const analysis3 = analyzeDiff(computeDiff(refSection3, inputSection3));
+
+      // Calculate WPM per section using the locked timestamps.
+      const section1TimeTaken =
+        startTime !== null
+          ? (section1Time - startTime) / 60000
+          : 0.001;
+      const section1WPM = section1WordCount / section1TimeTaken;
+
+      const section2TimeTaken =
+        (section2Time - section1Time) / 60000 || 0.001;
+      const section2WPM = section2WordCount / section2TimeTaken;
+
+      const section3WordCount = totalRefWords - section2Threshold;
+      const section3TimeTaken =
+        (end - section2Time) / 60000 || 0.001;
+      const section3WPM = section3WordCount / section3TimeTaken;
+
+      setSectionResults([
+        {
+          section: 'Beginning',
+          incorrectSpaces: analysis1.incorrectSpaces,
+          missingLetters: analysis1.missingLetters,
+          typos: analysis1.typos,
+          wpm: section1WPM,
+        },
+        {
+          section: 'Middle',
+          incorrectSpaces: analysis2.incorrectSpaces,
+          missingLetters: analysis2.missingLetters,
+          typos: analysis2.typos,
+          wpm: section2WPM,
+        },
+        {
+          section: 'End',
+          incorrectSpaces: analysis3.incorrectSpaces,
+          missingLetters: analysis3.missingLetters,
+          typos: analysis3.typos,
+          wpm: section3WPM,
+        },
+      ]);
+    }
+  };
+
+  // Reset the test.
   const resetTest = () => {
     setInputValue('');
     setStarted(false);
     setFinished(false);
     setStartTime(null);
-    setEndTime(null);
+    setFinishTime(null);
     setOverallResult(null);
     setSectionResults([]);
-    // Optionally, focus the input.
+    setSection1Time(null);
+    setSection2Time(null);
     inputRef.current?.focus();
   };
 
   return (
-    <main className="min-h-screen bg-gray-50 p-4">
-      <div className="max-w-2xl mx-auto space-y-6">
-        <h1 className="text-3xl font-bold text-center">Typing Test</h1>
-
-        {/* Display the fixed reference text */}
-        <div className="p-4 bg-white rounded shadow">
-          <p className="text-gray-800">{REFERENCE_TEXT}</p>
+    <main className="min-h-screen bg-white p-4">
+      {/* Outer container with a gray border */}
+      <div className="max-w-2xl mx-auto mt-8 p-6 border border-gray-300 rounded space-y-6">
+        
+        {/* Title & Description */}
+        <div>
+          <div className="flex items-center space-x-2">
+            <Keyboard className="w-5 h-5" />
+            <h1 className="text-2xl font-bold">Typing Test</h1>
+          </div>
+          <p className="text-gray-600">Test your typing speed and accuracy.</p>
         </div>
 
-        {/* Input field */}
-        <div className="space-y-2">
-          <p className="text-gray-600">
-            Start typing below. The timer starts with your first keystroke and the test ends when you press Enter.
+        {/* Reference Text */}
+        <div>
+          <div className="flex items-center space-x-2">
+            <FileText className="w-5 h-5" />
+            <h2 className="text-xl font-semibold">Reference Text</h2>
+          </div>
+          <div className="mt-2 p-4 bg-gray-50 border border-gray-200 rounded">
+            <p className="text-gray-800">{REFERENCE_TEXT}</p>
+          </div>
+        </div>
+
+        {/* Input Area */}
+        <div>
+          <div className="flex items-center space-x-2">
+            <Keyboard className="w-5 h-5" />
+            <h2 className="text-xl font-semibold">Your Input</h2>
+          </div>
+          <p className="text-gray-600 text-sm mt-1">
+            The timer starts on your first keystroke and ends when you press Enter.
           </p>
-          <Input
+          <textarea
             ref={inputRef}
-            type="text"
             placeholder="Start typing here..."
-            className="w-full p-2 border rounded"
+            className="w-full p-2 border rounded h-40 resize-none mt-2"
             value={inputValue}
-            onChange={(e) => setInputValue(e.target.value)}
+            onChange={handleChange}
             onKeyDown={handleKeyDown}
             disabled={finished}
           />
@@ -257,20 +329,24 @@ export default function TypingTestPage() {
 
         {/* Results Section */}
         {finished && overallResult && (
-          <div className="p-4 bg-white rounded shadow space-y-4">
-            <h2 className="text-2xl font-semibold">Results</h2>
+          <div className="bg-white p-4 rounded shadow space-y-4">
+            <h2 className="text-2xl font-semibold">Overall Results</h2>
             <div>
               <p>
-                <span className="font-medium">WPM:</span> {overallResult.wpm.toFixed(1)}
+                <span className="font-medium">WPM:</span>{' '}
+                {overallResult.wpm.toFixed(1)}
               </p>
               <p>
-                <span className="font-medium">Incorrect Spaces:</span> {overallResult.incorrectSpaces}
+                <span className="font-medium">Incorrect Spaces:</span>{' '}
+                {overallResult.incorrectSpaces}
               </p>
               <p>
-                <span className="font-medium">Missing Letters:</span> {overallResult.missingLetters}
+                <span className="font-medium">Missing Letters:</span>{' '}
+                {overallResult.missingLetters}
               </p>
               <p>
-                <span className="font-medium">Typos:</span> {overallResult.typos}
+                <span className="font-medium">Typos:</span>{' '}
+                {overallResult.typos}
               </p>
             </div>
 
@@ -282,7 +358,9 @@ export default function TypingTestPage() {
                     <div key={sec.section} className="border p-2 rounded">
                       <p className="font-semibold">{sec.section}:</p>
                       <p>
-                        Incorrect Spaces: {sec.incorrectSpaces}, Missing Letters: {sec.missingLetters}, Typos: {sec.typos}
+                        WPM: {sec.wpm.toFixed(1)} | Incorrect Spaces:{' '}
+                        {sec.incorrectSpaces}, Missing Letters:{' '}
+                        {sec.missingLetters}, Typos: {sec.typos}
                       </p>
                     </div>
                   ))}
@@ -296,9 +374,11 @@ export default function TypingTestPage() {
           </div>
         )}
 
-        {/* Guidance if test is finished but input is very short */}
+        {/* If test finished but input is too short for section analysis */}
         {finished && !overallResult && (
-          <p className="text-center text-gray-500">Test completed. Please try again for a detailed report.</p>
+          <p className="text-center text-gray-500">
+            Test completed. Please try again for a detailed report.
+          </p>
         )}
       </div>
     </main>
