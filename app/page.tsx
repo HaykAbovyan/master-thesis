@@ -7,7 +7,7 @@ import { Keyboard, FileText } from "lucide-react"; // Lucide icons
 
 // Fixed reference text for the typing test.
 const REFERENCE_TEXT =
-  "Աշակերտները դասարանում են: Նրանք սովորում են հայոց լեզու: Ուսուցչուհին գրատախտակին գրում է նոր բառեր: Աշակերտները ուշադիր լսում են ուսուսցչուհուն: Պատուհանից երևում է դպրոցի բակը: Այնտեղ մեծ ծառեր կան: Զանգը հնչում է, և դասը ավարտվում է: Երեխաները հավաքում են իրենց գրքերը: Նրանք դուրս են գալիս դասարանից: Բակում սկսում են խաղալ: Արևը պայծառ շողում է: Եղանակը տաք է և հաճելի: Շուտով կսկսվի հաջորդ դասը:";
+  "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Etiam nisi massa, congue eu dapibus nec, pretium a tortor. Proin et augue vitae sapien ornare efficitur non ac sapien. In porta ac orci eu finibus. Morbi ut nunc id arcu hendrerit lobortis. Proin maximus purus dictum, aliquam justo nec, egestas purus.";
 
 // Pre-calculate reference text word boundaries.
 const refWords = REFERENCE_TEXT.trim().split(/\s+/);
