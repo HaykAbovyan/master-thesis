@@ -1,13 +1,19 @@
-// app/page.tsx
 "use client";
 
-import { useState, useRef, KeyboardEvent, ChangeEvent } from "react";
+import {
+  useState,
+  useRef,
+  KeyboardEvent,
+  ChangeEvent,
+  useTransition,
+} from "react";
 import { Button } from "@/components/ui/button"; // shadcn‑ui component
 import { Keyboard, FileText } from "lucide-react"; // Lucide icons
+import { saveInSheet } from "@/serverActions/sheets";
 
 // Fixed reference text for the typing test.
 const REFERENCE_TEXT =
-"Աշակերտները դասարանում են: Նրանք սովորում են հայոց լեզու: Ուսուցչուհին գրատախտակին գրում է նոր բառեր: Աշակերտները ուշադիր լսում են ուսուսցչուհուն: Պատուհանից երևում է դպրոցի բակը: Այնտեղ մեծ ծառեր կան: Զանգը հնչում է, և դասը ավարտվում է: Երեխաները հավաքում են իրենց գրքերը: Նրանք դուրս են գալիս դասարանից: Բակում սկսում են խաղալ: Արևը պայծառ շողում է: Եղանակը տաք է և հաճելի: Շուտով կսկսվի հաջորդ դասը:";
+  "Աշակերտները դասարանում են: Նրանք սովորում են հայոց լեզու: Ուսուցչուհին գրատախտակին գրում է նոր բառեր: Աշակերտները ուշադիր լսում են ուսուսցչուհուն: Պատուհանից երևում է դպրոցի բակը: Այնտեղ մեծ ծառեր կան: Զանգը հնչում է, և դասը ավարտվում է: Երեխաները հավաքում են իրենց գրքերը: Նրանք դուրս են գալիս դասարանից: Բակում սկսում են խաղալ: Արևը պայծառ շողում է: Եղանակը տաք է և հաճելի: Շուտով կսկսվի հաջորդ դասը:";
 
 // Pre-calculate reference text word boundaries.
 const refWords = REFERENCE_TEXT.trim().split(/\s+/);
@@ -120,6 +126,7 @@ type SectionResult = {
 };
 
 export default function TypingTestPage() {
+  const [isPending, startTransition] = useTransition();
   const [inputValue, setInputValue] = useState("");
   const [started, setStarted] = useState(false);
   const [finished, setFinished] = useState(false);
@@ -146,6 +153,7 @@ export default function TypingTestPage() {
       setStarted(true);
       setStartTime(Date.now());
     }
+
     // End the test when Enter is pressed.
     if (e.key === "Enter") {
       e.preventDefault();
@@ -174,92 +182,119 @@ export default function TypingTestPage() {
 
   // Finalize the test.
   const finishTest = () => {
-    const end = Date.now();
-    setFinishTime(end);
-    setFinished(true);
+    startTransition(async () => {
+      const end = Date.now();
+      setFinishTime(end);
+      setFinished(true);
 
-    const durationMinutes =
-      startTime !== null ? (end - startTime) / 60000 : 0.001;
+      const durationMinutes =
+        startTime !== null ? (end - startTime) / 60000 : 0.001;
 
-    // Overall WPM calculation based on words typed.
-    const overallWords =
-      inputValue.trim() === "" ? 0 : inputValue.trim().split(/\s+/).length;
-    const overallWPM = overallWords / durationMinutes;
+      // Overall WPM calculation based on words typed.
+      const overallWords =
+        inputValue.trim() === "" ? 0 : inputValue.trim().split(/\s+/).length;
+      const overallWPM = overallWords / durationMinutes;
 
-    // Overall error analysis comparing the fixed reference to the input.
-    const overallDiff = computeDiff(REFERENCE_TEXT, inputValue);
-    const overallAnalysis = analyzeDiff(overallDiff);
-    setOverallResult({
-      wpm: overallWPM,
-      incorrectSpaces: overallAnalysis.incorrectSpaces,
-      missingLetters: overallAnalysis.missingLetters,
-      typos: overallAnalysis.typos,
+      // Overall error analysis comparing the fixed reference to the input.
+      const overallDiff = computeDiff(REFERENCE_TEXT, inputValue);
+      const overallAnalysis = analyzeDiff(overallDiff);
+
+      const overallResult = {
+        wpm: overallWPM,
+        incorrectSpaces: overallAnalysis.incorrectSpaces,
+        missingLetters: overallAnalysis.missingLetters,
+        typos: overallAnalysis.typos,
+      };
+
+      let sections = null;
+
+      // Proceed with section analysis only if input is long enough and timestamps are set.
+      const inputWords = inputValue.trim().split(/\s+/);
+      if (
+        inputWords.length >= totalRefWords &&
+        section1Time !== null &&
+        section2Time !== null
+      ) {
+        // Divide reference text into sections.
+        const refSection1 = refWords.slice(0, section1WordCount).join(" ");
+        const refSection2 = refWords
+          .slice(section1WordCount, section2Threshold)
+          .join(" ");
+        const refSection3 = refWords.slice(section2Threshold).join(" ");
+
+        // Divide input text into corresponding sections.
+        const inputSection1 = inputWords.slice(0, section1WordCount).join(" ");
+        const inputSection2 = inputWords
+          .slice(section1WordCount, section2Threshold)
+          .join(" ");
+        const inputSection3 = inputWords
+          .slice(section2Threshold, totalRefWords)
+          .join(" ");
+
+        // Compute diff and error analysis for each section.
+        const analysis1 = analyzeDiff(computeDiff(refSection1, inputSection1));
+        const analysis2 = analyzeDiff(computeDiff(refSection2, inputSection2));
+        const analysis3 = analyzeDiff(computeDiff(refSection3, inputSection3));
+
+        // Calculate WPM per section using the locked timestamps.
+        const section1TimeTaken =
+          startTime !== null ? (section1Time - startTime) / 60000 : 0.001;
+        const section1WPM = section1WordCount / section1TimeTaken;
+
+        const section2TimeTaken =
+          (section2Time - section1Time) / 60000 || 0.001;
+        const section2WPM = section2WordCount / section2TimeTaken;
+
+        const section3WordCount = totalRefWords - section2Threshold;
+        const section3TimeTaken = (end - section2Time) / 60000 || 0.001;
+        const section3WPM = section3WordCount / section3TimeTaken;
+
+        sections = [
+          {
+            section: "Beginning",
+            incorrectSpaces: analysis1.incorrectSpaces,
+            missingLetters: analysis1.missingLetters,
+            typos: analysis1.typos,
+            wpm: section1WPM,
+          },
+          {
+            section: "Middle",
+            incorrectSpaces: analysis2.incorrectSpaces,
+            missingLetters: analysis2.missingLetters,
+            typos: analysis2.typos,
+            wpm: section2WPM,
+          },
+          {
+            section: "End",
+            incorrectSpaces: analysis3.incorrectSpaces,
+            missingLetters: analysis3.missingLetters,
+            typos: analysis3.typos,
+            wpm: section3WPM,
+          },
+        ];
+      }
+
+      const body = new FormData();
+
+      body.append(
+        "overallResult",
+        JSON.stringify({
+          ...overallResult,
+          section: "Total",
+        }),
+      );
+
+      body.append("sections", JSON.stringify(sections));
+
+      const data = await saveInSheet(body);
+
+      if (data?.success) {
+        setOverallResult(overallResult);
+        if (sections) {
+          setSectionResults(sections);
+        }
+      }
     });
-
-    // Proceed with section analysis only if input is long enough and timestamps are set.
-    const inputWords = inputValue.trim().split(/\s+/);
-    if (
-      inputWords.length >= totalRefWords &&
-      section1Time !== null &&
-      section2Time !== null
-    ) {
-      // Divide reference text into sections.
-      const refSection1 = refWords.slice(0, section1WordCount).join(" ");
-      const refSection2 = refWords
-        .slice(section1WordCount, section2Threshold)
-        .join(" ");
-      const refSection3 = refWords.slice(section2Threshold).join(" ");
-
-      // Divide input text into corresponding sections.
-      const inputSection1 = inputWords.slice(0, section1WordCount).join(" ");
-      const inputSection2 = inputWords
-        .slice(section1WordCount, section2Threshold)
-        .join(" ");
-      const inputSection3 = inputWords
-        .slice(section2Threshold, totalRefWords)
-        .join(" ");
-
-      // Compute diff and error analysis for each section.
-      const analysis1 = analyzeDiff(computeDiff(refSection1, inputSection1));
-      const analysis2 = analyzeDiff(computeDiff(refSection2, inputSection2));
-      const analysis3 = analyzeDiff(computeDiff(refSection3, inputSection3));
-
-      // Calculate WPM per section using the locked timestamps.
-      const section1TimeTaken =
-        startTime !== null ? (section1Time - startTime) / 60000 : 0.001;
-      const section1WPM = section1WordCount / section1TimeTaken;
-
-      const section2TimeTaken = (section2Time - section1Time) / 60000 || 0.001;
-      const section2WPM = section2WordCount / section2TimeTaken;
-
-      const section3WordCount = totalRefWords - section2Threshold;
-      const section3TimeTaken = (end - section2Time) / 60000 || 0.001;
-      const section3WPM = section3WordCount / section3TimeTaken;
-
-      setSectionResults([
-        {
-          section: "Beginning",
-          incorrectSpaces: analysis1.incorrectSpaces,
-          missingLetters: analysis1.missingLetters,
-          typos: analysis1.typos,
-          wpm: section1WPM,
-        },
-        {
-          section: "Middle",
-          incorrectSpaces: analysis2.incorrectSpaces,
-          missingLetters: analysis2.missingLetters,
-          typos: analysis2.typos,
-          wpm: section2WPM,
-        },
-        {
-          section: "End",
-          incorrectSpaces: analysis3.incorrectSpaces,
-          missingLetters: analysis3.missingLetters,
-          typos: analysis3.typos,
-          wpm: section3WPM,
-        },
-      ]);
-    }
   };
 
   // Reset the test.
@@ -302,7 +337,6 @@ export default function TypingTestPage() {
           </div>
         </div>
 
-        {/* Input Area */}
         <div>
           <div className="flex items-center space-x-2">
             <Keyboard className="w-5 h-5" />
@@ -323,8 +357,16 @@ export default function TypingTestPage() {
           />
         </div>
 
+        {isPending && (
+          <div className="flex items-center justify-center">
+            <p className="text-gray-600 animate-pulse">
+              Processing data... Please wait for the detailed report.
+            </p>
+          </div>
+        )}
+
         {/* Results Section */}
-        {finished && overallResult && (
+        {!isPending && finished && overallResult && (
           <div className="bg-white p-4 rounded shadow space-y-4">
             <h2 className="text-2xl font-semibold">Overall Results</h2>
             <div>
@@ -380,4 +422,3 @@ export default function TypingTestPage() {
     </main>
   );
 }
-
