@@ -1,13 +1,20 @@
-// app/page.tsx
 "use client";
 
-import { useState, useRef, KeyboardEvent, ChangeEvent } from "react";
+import {
+  useState,
+  useRef,
+  KeyboardEvent,
+  ChangeEvent,
+  useActionState,
+} from "react";
 import { Button } from "@/components/ui/button"; // shadcn‑ui component
 import { Keyboard, FileText } from "lucide-react"; // Lucide icons
+import { saveInSheet } from "@/serverActions/sheets";
+import { Input } from "@/components/ui/input";
 
 // Fixed reference text for the typing test.
 const REFERENCE_TEXT =
-"Աշակերտները դասարանում են: Նրանք սովորում են հայոց լեզու: Ուսուցչուհին գրատախտակին գրում է նոր բառեր: Աշակերտները ուշադիր լսում են ուսուսցչուհուն: Պատուհանից երևում է դպրոցի բակը: Այնտեղ մեծ ծառեր կան: Զանգը հնչում է, և դասը ավարտվում է: Երեխաները հավաքում են իրենց գրքերը: Նրանք դուրս են գալիս դասարանից: Բակում սկսում են խաղալ: Արևը պայծառ շողում է: Եղանակը տաք է և հաճելի: Շուտով կսկսվի հաջորդ դասը:";
+  "Աշակերտները դասարանում են: Նրանք սովորում են հայոց լեզու: Ուսուցչուհին գրատախտակին գրում է նոր բառեր: Աշակերտները ուշադիր լսում են ուսուսցչուհուն: Պատուհանից երևում է դպրոցի բակը: Այնտեղ մեծ ծառեր կան: Զանգը հնչում է, և դասը ավարտվում է: Երեխաները հավաքում են իրենց գրքերը: Նրանք դուրս են գալիս դասարանից: Բակում սկսում են խաղալ: Արևը պայծառ շողում է: Եղանակը տաք է և հաճելի: Շուտով կսկսվի հաջորդ դասը:";
 
 // Pre-calculate reference text word boundaries.
 const refWords = REFERENCE_TEXT.trim().split(/\s+/);
@@ -137,6 +144,40 @@ export default function TypingTestPage() {
   const [section1Time, setSection1Time] = useState<number | null>(null);
   const [section2Time, setSection2Time] = useState<number | null>(null);
 
+  const [state, formAction, isPending] = useActionState(
+    async (
+      _prev: { success: boolean; message: string } | null,
+      formData: FormData,
+    ) => {
+      const userInfo = formData.get("userInfo");
+
+      if (!userInfo) {
+        return { success: false, message: "User info is required" };
+      }
+
+      const body = new FormData();
+
+      body.append("userInfo", userInfo);
+
+      if (overallResult) {
+        body.append(
+          "overallResult",
+          JSON.stringify({
+            ...overallResult,
+            section: "Total",
+          }),
+        );
+      }
+
+      if (sectionResults.length > 0) {
+        body.append("sections", JSON.stringify(sectionResults));
+      }
+
+      return saveInSheet(body);
+    },
+    null,
+  );
+
   // Use HTMLTextAreaElement as the ref type for the multi-line input.
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -146,6 +187,7 @@ export default function TypingTestPage() {
       setStarted(true);
       setStartTime(Date.now());
     }
+
     // End the test when Enter is pressed.
     if (e.key === "Enter") {
       e.preventDefault();
@@ -173,7 +215,7 @@ export default function TypingTestPage() {
   };
 
   // Finalize the test.
-  const finishTest = () => {
+  const finishTest = async () => {
     const end = Date.now();
     setFinishTime(end);
     setFinished(true);
@@ -189,12 +231,15 @@ export default function TypingTestPage() {
     // Overall error analysis comparing the fixed reference to the input.
     const overallDiff = computeDiff(REFERENCE_TEXT, inputValue);
     const overallAnalysis = analyzeDiff(overallDiff);
-    setOverallResult({
+
+    const overallResult = {
       wpm: overallWPM,
       incorrectSpaces: overallAnalysis.incorrectSpaces,
       missingLetters: overallAnalysis.missingLetters,
       typos: overallAnalysis.typos,
-    });
+    };
+
+    let sections = null;
 
     // Proceed with section analysis only if input is long enough and timestamps are set.
     const inputWords = inputValue.trim().split(/\s+/);
@@ -236,7 +281,7 @@ export default function TypingTestPage() {
       const section3TimeTaken = (end - section2Time) / 60000 || 0.001;
       const section3WPM = section3WordCount / section3TimeTaken;
 
-      setSectionResults([
+      sections = [
         {
           section: "Beginning",
           incorrectSpaces: analysis1.incorrectSpaces,
@@ -258,7 +303,12 @@ export default function TypingTestPage() {
           typos: analysis3.typos,
           wpm: section3WPM,
         },
-      ]);
+      ];
+    }
+
+    setOverallResult(overallResult);
+    if (sections) {
+      setSectionResults(sections);
     }
   };
 
@@ -302,7 +352,6 @@ export default function TypingTestPage() {
           </div>
         </div>
 
-        {/* Input Area */}
         <div>
           <div className="flex items-center space-x-2">
             <Keyboard className="w-5 h-5" />
@@ -323,51 +372,79 @@ export default function TypingTestPage() {
           />
         </div>
 
+        {isPending && (
+          <div className="flex items-center justify-center">
+            <p className="text-gray-600 animate-pulse">
+              Processing data... Please wait for the detailed report.
+            </p>
+          </div>
+        )}
+
         {/* Results Section */}
         {finished && overallResult && (
-          <div className="bg-white p-4 rounded shadow space-y-4">
-            <h2 className="text-2xl font-semibold">Overall Results</h2>
-            <div>
-              <p>
-                <span className="font-medium">WPM:</span>{" "}
-                {overallResult.wpm.toFixed(1)}
-              </p>
-              <p>
-                <span className="font-medium">Incorrect Spaces:</span>{" "}
-                {overallResult.incorrectSpaces}
-              </p>
-              <p>
-                <span className="font-medium">Missing Letters:</span>{" "}
-                {overallResult.missingLetters}
-              </p>
-              <p>
-                <span className="font-medium">Typos:</span>{" "}
-                {overallResult.typos}
-              </p>
-            </div>
-
-            {sectionResults.length === 3 && (
+          <dialog open>
+            <div className="bg-white p-4 rounded shadow space-y-4">
+              <h2 className="text-2xl font-semibold">Overall Results</h2>
               <div>
-                <h3 className="text-xl font-medium mt-4">Section Analysis</h3>
-                <div className="space-y-2">
-                  {sectionResults.map((sec) => (
-                    <div key={sec.section} className="border p-2 rounded">
-                      <p className="font-semibold">{sec.section}:</p>
-                      <p>
-                        WPM: {sec.wpm.toFixed(1)} | Incorrect Spaces:{" "}
-                        {sec.incorrectSpaces}, Missing Letters:{" "}
-                        {sec.missingLetters}, Typos: {sec.typos}
-                      </p>
-                    </div>
-                  ))}
-                </div>
+                <p>
+                  <span className="font-medium">WPM:</span>{" "}
+                  {overallResult.wpm.toFixed(1)}
+                </p>
+                <p>
+                  <span className="font-medium">Incorrect Spaces:</span>{" "}
+                  {overallResult.incorrectSpaces}
+                </p>
+                <p>
+                  <span className="font-medium">Missing Letters:</span>{" "}
+                  {overallResult.missingLetters}
+                </p>
+                <p>
+                  <span className="font-medium">Typos:</span>{" "}
+                  {overallResult.typos}
+                </p>
               </div>
-            )}
 
-            <Button onClick={resetTest} className="mt-4">
-              Reset Test
-            </Button>
-          </div>
+              {sectionResults.length === 3 && (
+                <div>
+                  <h3 className="text-xl font-medium mt-4">Section Analysis</h3>
+                  <div className="space-y-2">
+                    {sectionResults.map((sec) => (
+                      <div key={sec.section} className="border p-2 rounded">
+                        <p className="font-semibold">{sec.section}:</p>
+                        <p>
+                          WPM: {sec.wpm.toFixed(1)} | Incorrect Spaces:{" "}
+                          {sec.incorrectSpaces}, Missing Letters:{" "}
+                          {sec.missingLetters}, Typos: {sec.typos}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {!state?.success && (
+                <form action={formAction}>
+                  <div className="flex gap-4">
+                    <Input
+                      type="text"
+                      name="userInfo"
+                      placeholder="..."
+                      className="border-black"
+                    />
+                    <Button>Submit</Button>
+
+                    {state?.success === false && state.message && (
+                      <p className="text-red-500">{state.message}</p>
+                    )}
+                  </div>
+                </form>
+              )}
+
+              <Button onClick={resetTest} className="mt-4 w-full">
+                Reset Test
+              </Button>
+            </div>
+          </dialog>
         )}
 
         {/* If test finished but input is too short for section analysis */}
@@ -380,4 +457,3 @@ export default function TypingTestPage() {
     </main>
   );
 }
-
